@@ -10,8 +10,8 @@ GCP_REGION ?= europe-west1
 # Cloud Function name from Google Cloud Console
 CF_NAME ?= tides-proxy
 
-// This name doesn't matter in the current URL config - because we serve just
-// one function on the root URL only.
+# This name doesn't matter in the current URL config - because we serve just
+# one function on the root URL only.
 CF_ENTRY_POINT ?= unused-entry-point-name
 
 .PHONY: gotest runlocalproxysvr deploy examplerequestcommand startlocalproxysvrandfirerequest gcpsetup
