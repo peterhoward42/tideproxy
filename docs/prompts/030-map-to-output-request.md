@@ -8,7 +8,7 @@ to the worldapi server as described in /docs/specs/overview.md
 - Write a DRY function with the following signature
 
 ```
-func SynthesiseOutputRequest(*InputRequest) (*OutputRequest, error)
+func SynthesiseOutputRequest(*IncomingRequest) (*OutputRequest, error)
 ```
 
 - The type OutputRequest is the logical model for the output request - not a native http request.
@@ -17,7 +17,7 @@ func SynthesiseOutputRequest(*InputRequest) (*OutputRequest, error)
 ## Instructions
 
 - Read the API documentation for https://www.worldtides.info/apidocs/extremes
-- Design the logical process to map an InputRequest into a well formed output request to the worldtides api
+- Design the logical process to map an IncomingRequest into a well formed output request to the worldtides api
 - Code the OutputRequest go type
 - Write a pure function to construct an OutputRequest from a given InputRequest
 - Provide appropriate tests for the code generated in this step.
