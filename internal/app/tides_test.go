@@ -1,6 +1,7 @@
 package app_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -44,16 +45,32 @@ func mustDecodeAPIError(t *testing.T, body []byte) (code, message string) {
 	return v.Error.Code, v.Error.Message
 }
 
+// validWorldTidesExtremesJSON returns a minimal WorldTides v3 extremes payload
+// that passes [app.ParseIncomingResponse] validation.
+func validWorldTidesExtremesJSON(t *testing.T) []byte {
+	t.Helper()
+	m := map[string]any{
+		"status":          200,
+		"copyright":       "upstream attribution fixture",
+		"requestDatum":    "CD",
+		"responseDatum":   "CD",
+		"extremes":        []map[string]any{{"dt": int64(1710994320), "height": 4.81, "type": "High"}},
+		"responseLat":     51.5,
+		"responseLon":     -0.12,
+	}
+	b, err := json.Marshal(m)
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+	return b
+}
+
 func TestApplication_handleTides_upstreamSuccessForwardsBody(t *testing.T) {
 	t.Parallel()
 
 	at := time.Date(2026, 3, 21, 12, 0, 0, 0, time.UTC)
 	apiKey := "fixture-api-key"
-	wantPayload := map[string]any{"upstream": true}
-	upstreamBody, err := json.Marshal(wantPayload)
-	if err != nil {
-		t.Fatalf("json.Marshal: %v", err)
-	}
+	upstreamBody := validWorldTidesExtremesJSON(t)
 
 	var captured *http.Request
 	fake := &fakeHTTPDoer{
@@ -62,7 +79,7 @@ func TestApplication_handleTides_upstreamSuccessForwardsBody(t *testing.T) {
 			return &http.Response{
 				StatusCode: http.StatusOK,
 				Header:     http.Header{"Content-Type": []string{"application/vnd.test+json"}},
-				Body:       io.NopCloser(strings.NewReader(string(upstreamBody))),
+				Body:       io.NopCloser(bytes.NewReader(upstreamBody)),
 			}, nil
 		},
 	}
@@ -87,16 +104,8 @@ func TestApplication_handleTides_upstreamSuccessForwardsBody(t *testing.T) {
 		t.Fatalf("Content-Type: got %q want %q", got, "application/vnd.test+json")
 	}
 
-	var gotPayload map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &gotPayload); err != nil {
-		t.Fatalf("response body json: %v", err)
-	}
-	if len(gotPayload) != 1 {
-		t.Fatalf("payload keys: got %v", gotPayload)
-	}
-	v, ok := gotPayload["upstream"].(bool)
-	if !ok || !v {
-		t.Fatalf("payload upstream: got %v", gotPayload["upstream"])
+	if !bytes.Equal(rec.Body.Bytes(), upstreamBody) {
+		t.Fatalf("response body: got %q want %q", rec.Body.Bytes(), upstreamBody)
 	}
 
 	in := app.IncomingRequest{Lat: lat, Lon: lon}
@@ -178,6 +187,70 @@ func TestApplication_handleTides_invalidQuery(t *testing.T) {
 				t.Fatalf("error code: got %q want %q", code, tt.wantCode)
 			}
 		})
+	}
+}
+
+func TestApplication_handleTides_upstreamJSONDoesNotValidate(t *testing.T) {
+	t.Parallel()
+
+	at := time.Date(2023, 3, 3, 0, 0, 0, 0, time.UTC)
+	fake := &fakeHTTPDoer{
+		doFn: func(*http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader("{}")),
+			}, nil
+		},
+	}
+	deps := app.Dependencies{
+		HTTPClient:       fake,
+		WorldTidesAPIKey: "k",
+		Clock:            fixedClock{t: at},
+	}
+	application := app.NewApplication(deps)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/tides?lat=0&lon=0", http.NoBody)
+	rec := httptest.NewRecorder()
+	application.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("status: got %d want %d", rec.Code, http.StatusBadGateway)
+	}
+	code, msg := mustDecodeAPIError(t, rec.Body.Bytes())
+	if code != "UPSTREAM_ERROR" || msg != "Failed to retrieve tidal data" {
+		t.Fatalf("error: code=%q msg=%q", code, msg)
+	}
+}
+
+func TestApplication_handleTides_upstreamMalformedJSON(t *testing.T) {
+	t.Parallel()
+
+	at := time.Date(2023, 3, 3, 0, 0, 0, 0, time.UTC)
+	fake := &fakeHTTPDoer{
+		doFn: func(*http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader("{")),
+			}, nil
+		},
+	}
+	deps := app.Dependencies{
+		HTTPClient:       fake,
+		WorldTidesAPIKey: "k",
+		Clock:            fixedClock{t: at},
+	}
+	application := app.NewApplication(deps)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/tides?lat=0&lon=0", http.NoBody)
+	rec := httptest.NewRecorder()
+	application.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("status: got %d want %d", rec.Code, http.StatusBadGateway)
+	}
+	code, _ := mustDecodeAPIError(t, rec.Body.Bytes())
+	if code != "UPSTREAM_ERROR" {
+		t.Fatalf("error code: got %q", code)
 	}
 }
 
@@ -294,11 +367,12 @@ func TestApplication_handleTides_defaultContentTypeWhenUpstreamOmits(t *testing.
 	t.Parallel()
 
 	at := time.Date(2022, 2, 2, 0, 0, 0, 0, time.UTC)
+	body := validWorldTidesExtremesJSON(t)
 	fake := &fakeHTTPDoer{
 		doFn: func(*http.Request) (*http.Response, error) {
 			return &http.Response{
 				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader("{}")),
+				Body:       io.NopCloser(bytes.NewReader(body)),
 			}, nil
 		},
 	}

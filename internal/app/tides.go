@@ -25,7 +25,8 @@ func (a *Application) refTime() time.Time {
 
 // handleTides serves GET /v1/tides by validating query parameters, building the
 // WorldTides extremes request, and performing the outbound HTTP call. A
-// successful upstream response is forwarded without interpreting the body.
+// successful upstream response body is validated as a WorldTides extremes
+// payload before being forwarded unchanged.
 func (a *Application) handleTides(w http.ResponseWriter, r *http.Request) {
 	payload, err := latLonQueryJSON(r.URL.Query())
 	if err != nil {
@@ -72,13 +73,24 @@ func (a *Application) handleTides(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		writeAPIError(w, http.StatusBadGateway, "UPSTREAM_ERROR", "Failed to retrieve tidal data")
+		return
+	}
+
+	if _, err := ParseIncomingResponse(body); err != nil {
+		writeAPIError(w, http.StatusBadGateway, "UPSTREAM_ERROR", "Failed to retrieve tidal data")
+		return
+	}
+
 	if ct := resp.Header.Get("Content-Type"); ct != "" {
 		w.Header().Set("Content-Type", ct)
 	} else {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	}
 	w.WriteHeader(http.StatusOK)
-	_, _ = io.Copy(w, resp.Body)
+	_, _ = w.Write(body)
 }
 
 func latLonQueryJSON(q url.Values) ([]byte, error) {
