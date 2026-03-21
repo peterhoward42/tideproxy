@@ -45,19 +45,7 @@ deploy:
 		--allow-unauthenticated \
 		--set-env-vars=WORLDTIDES_API_KEY=$$WORLDTIDES_API_KEY
 
+# Requires a local server (e.g. make runlocalproxysvr in another terminal).
 examplerequestcommand:
-	@echo 'curl -sS "http://127.0.0.1:8080/v1/tides?lat=51.5074&lon=-0.1278"'
+	@curl -sS "http://127.0.0.1:8080/v1/tides?lat=51.5074&lon=-0.1278"
 
-startlocalproxysvrandfirerequest:
-	@test -n "$$WORLDTIDES_API_KEY" || { echo >&2 "WORLDTIDES_API_KEY must be set"; exit 1; }
-	@bash -euo pipefail -c '\
-		go run ./cmd/tideproxy & pid=$$!; \
-		trap "kill $$pid 2>/dev/null || true" EXIT; \
-		for i in $$(seq 1 40); do \
-			if curl -sfS "http://127.0.0.1:8080/v1/tides?lat=51.5074&lon=-0.1278"; then \
-				exit 0; \
-			fi; \
-			sleep 0.25; \
-		done; \
-		echo >&2 "server did not become ready or request failed"; \
-		exit 1'
