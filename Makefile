@@ -1,16 +1,34 @@
 # Common tasks for tideproxy (see docs/specs/overview.md).
 # Deploy defaults; override when invoking make, e.g. make deploy GCP_REGION=us-central1
+# For gcpsetup: make gcpsetup GCP_PROJECT_ID=your-project-id
 
-GCP_REGION ?= europe-west2
-CF_NAME ?= tideproxy
-# Any name works: the app registers a single unnamed HTTP handler; the framework
-# maps FUNCTION_TARGET to that handler (see functions-framework-go registry).
-CF_ENTRY_POINT ?= tideproxy
+# Project ID from Google Cloud Console
+GCP_PROJECT_ID = tides-proxy 
 
-.PHONY: gotest runlocalproxysvr deploy examplerequestcommand startlocalproxysvrandfirerequest
+GCP_REGION ?= europe-west1
+
+# Cloud Function name from Google Cloud Console
+CF_NAME ?= tides-proxy
+
+// This name doesn't matter in the current URL config - because we serve just
+// one function on the root URL only.
+CF_ENTRY_POINT ?= unused-entry-point-name
+
+.PHONY: gotest runlocalproxysvr deploy examplerequestcommand startlocalproxysvrandfirerequest gcpsetup
 
 gotest:
 	go test ./...
+
+# Set active gcloud project and enable APIs used by Cloud Functions (2nd gen) deploy.
+gcpsetup:
+	@test -n "$(GCP_PROJECT_ID)" || { echo >&2 "GCP_PROJECT_ID must be set (e.g. make gcpsetup GCP_PROJECT_ID=my-project-id)"; exit 1; }
+	gcloud config set project $(GCP_PROJECT_ID)
+	gcloud services enable \
+		artifactregistry.googleapis.com \
+		cloudbuild.googleapis.com \
+		cloudfunctions.googleapis.com \
+		run.googleapis.com \
+		logging.googleapis.com
 
 runlocalproxysvr:
 	@test -n "$$WORLDTIDES_API_KEY" || { echo >&2 "WORLDTIDES_API_KEY must be set"; exit 1; }
