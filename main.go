@@ -7,7 +7,7 @@ import (
 
 	"github.com/GoogleCloudPlatform/functions-framework-go/funcframework"
 
-	"tideproxy/internal/app"
+	"github.com/peterhoward42/tideproxy/internal/app"
 )
 
 func main() {

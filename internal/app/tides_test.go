@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"tideproxy/internal/app"
+	"github.com/peterhoward42/tideproxy/internal/app"
 )
 
 func mustNewDeps(t *testing.T, httpClient app.HTTPDoer, worldTidesAPIKey string, clock app.TimeSource) app.Dependencies {

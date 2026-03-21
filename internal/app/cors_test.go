@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"tideproxy/internal/app"
+	"github.com/peterhoward42/tideproxy/internal/app"
 )
 
 func TestWithCORS_GET_v1_tides_setsAllowOrigin(t *testing.T) {
