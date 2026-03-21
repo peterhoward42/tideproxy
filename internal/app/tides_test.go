@@ -65,7 +65,7 @@ func validWorldTidesExtremesJSON(t *testing.T) []byte {
 	return b
 }
 
-func TestApplication_handleTides_upstreamSuccessForwardsBody(t *testing.T) {
+func TestApplication_handleTides_upstreamSuccessReturnsProxyJSON(t *testing.T) {
 	t.Parallel()
 
 	at := time.Date(2026, 3, 21, 12, 0, 0, 0, time.UTC)
@@ -100,12 +100,38 @@ func TestApplication_handleTides_upstreamSuccessForwardsBody(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status: got %d want %d body=%q", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	if got := rec.Header().Get("Content-Type"); got != "application/vnd.test+json" {
-		t.Fatalf("Content-Type: got %q want %q", got, "application/vnd.test+json")
+	if got := rec.Header().Get("Content-Type"); got != "application/json; charset=utf-8" {
+		t.Fatalf("Content-Type: got %q want application/json; charset=utf-8", got)
 	}
 
-	if !bytes.Equal(rec.Body.Bytes(), upstreamBody) {
-		t.Fatalf("response body: got %q want %q", rec.Body.Bytes(), upstreamBody)
+	var body struct {
+		Tides []struct {
+			Type         string  `json:"type"`
+			Time         string  `json:"time"`
+			HeightMetres float64 `json:"heightMetres"`
+		} `json:"tides"`
+		Datum       string `json:"datum"`
+		WindowStart string `json:"windowStart"`
+		ExpiresAt   string `json:"expiresAt"`
+		Attribution string `json:"attribution"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("response JSON: %v", err)
+	}
+	if body.Datum != "CD" {
+		t.Fatalf("datum: got %q", body.Datum)
+	}
+	if body.WindowStart != "2026-03-21T00:00:00Z" || body.ExpiresAt != "2026-03-24T00:00:00Z" {
+		t.Fatalf("window: windowStart=%q expiresAt=%q", body.WindowStart, body.ExpiresAt)
+	}
+	if body.Attribution != "upstream attribution fixture" {
+		t.Fatalf("attribution: got %q", body.Attribution)
+	}
+	if len(body.Tides) != 1 || body.Tides[0].Type != "High" || body.Tides[0].HeightMetres != 4.81 {
+		t.Fatalf("tides: %#v", body.Tides)
+	}
+	if body.Tides[0].Time != "2024-03-21T04:12:00Z" {
+		t.Fatalf("tide time: got %q", body.Tides[0].Time)
 	}
 
 	in := app.IncomingRequest{Lat: lat, Lon: lon}

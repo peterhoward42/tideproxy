@@ -25,8 +25,8 @@ func (a *Application) refTime() time.Time {
 
 // handleTides serves GET /v1/tides by validating query parameters, building the
 // WorldTides extremes request, and performing the outbound HTTP call. A
-// successful upstream response body is validated as a WorldTides extremes
-// payload before being forwarded unchanged.
+// successful upstream body is parsed as a WorldTides extremes payload, mapped
+// to the proxy API success shape, and written as JSON.
 func (a *Application) handleTides(w http.ResponseWriter, r *http.Request) {
 	payload, err := latLonQueryJSON(r.URL.Query())
 	if err != nil {
@@ -79,18 +79,21 @@ func (a *Application) handleTides(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := ParseIncomingResponse(body); err != nil {
+	inResp, err := ParseIncomingResponse(body)
+	if err != nil {
 		writeAPIError(w, http.StatusBadGateway, "UPSTREAM_ERROR", "Failed to retrieve tidal data")
 		return
 	}
 
-	if ct := resp.Header.Get("Content-Type"); ct != "" {
-		w.Header().Set("Content-Type", ct)
-	} else {
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	apiResp, err := SynthesiseTidesAPIResponse(&inResp, a.refTime())
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
+		return
 	}
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(body)
+
+	if err := WriteTidesAPIResponse(w, apiResp); err != nil {
+		return
+	}
 }
 
 func latLonQueryJSON(q url.Values) ([]byte, error) {
