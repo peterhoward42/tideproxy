@@ -10,8 +10,9 @@ import (
 func TestSynthesiseOutputRequest_valid(t *testing.T) {
 	t.Parallel()
 
+	at := time.Date(2026, 3, 21, 15, 30, 45, 0, time.UTC)
 	in := &IncomingRequest{Lat: 51.5, Lon: -0.12}
-	got, err := SynthesiseOutputRequest(in)
+	got, err := SynthesiseOutputRequest(in, at)
 	if err != nil {
 		t.Fatalf("SynthesiseOutputRequest: %v", err)
 	}
@@ -19,8 +20,7 @@ func TestSynthesiseOutputRequest_valid(t *testing.T) {
 		t.Fatal("expected non-nil OutputRequest")
 	}
 
-	now := time.Now().UTC()
-	wantStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	wantStart := time.Date(at.Year(), at.Month(), at.Day(), 0, 0, 0, 0, time.UTC)
 
 	if got.Scheme != "https" || got.Host != worldTidesHTTPSHost || got.Path != worldTidesAPIv3Path {
 		t.Fatalf("endpoint: got scheme=%q host=%q path=%q", got.Scheme, got.Host, got.Path)
@@ -45,7 +45,7 @@ func TestSynthesiseOutputRequest_valid(t *testing.T) {
 func TestSynthesiseOutputRequest_nilIncoming(t *testing.T) {
 	t.Parallel()
 
-	_, err := SynthesiseOutputRequest(nil)
+	_, err := SynthesiseOutputRequest(nil, time.Time{})
 	if !errors.Is(err, errNilIncomingRequest) {
 		t.Fatalf("error: got %v want %v", err, errNilIncomingRequest)
 	}
@@ -78,7 +78,8 @@ func TestSynthesiseOutputRequest_invalidCoordinates(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			_, err := SynthesiseOutputRequest(tt.in)
+			at := time.Date(2020, 6, 1, 12, 0, 0, 0, time.UTC)
+			_, err := SynthesiseOutputRequest(tt.in, at)
 			if !errors.Is(err, tt.want) {
 				t.Fatalf("error: got %v want %v", err, tt.want)
 			}

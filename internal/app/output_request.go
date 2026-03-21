@@ -42,8 +42,8 @@ type OutputRequest struct {
 
 // SynthesiseOutputRequest maps a validated [IncomingRequest] into an
 // [OutputRequest] for the WorldTides extremes endpoint. The coverage interval
-// is anchored to the current UTC date at the time of the call.
-func SynthesiseOutputRequest(in *IncomingRequest) (*OutputRequest, error) {
+// is anchored to the UTC calendar date of at.
+func SynthesiseOutputRequest(in *IncomingRequest, at time.Time) (*OutputRequest, error) {
 	if in == nil {
 		return nil, errNilIncomingRequest
 	}
@@ -57,7 +57,7 @@ func SynthesiseOutputRequest(in *IncomingRequest) (*OutputRequest, error) {
 		return nil, errLonOutOfRange
 	}
 
-	now := time.Now().UTC()
+	now := at.UTC()
 	windowStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 
 	return &OutputRequest{

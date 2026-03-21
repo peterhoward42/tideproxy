@@ -2,10 +2,26 @@ package app
 
 import (
 	"net/http"
+	"time"
 )
 
+// HTTPDoer performs outbound HTTP requests. [*http.Client] satisfies HTTPDoer.
+type HTTPDoer interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
+// TimeSource supplies the current instant for synthesising time-bounded upstream
+// requests. When nil on [Dependencies], wall clock time is used.
+type TimeSource interface {
+	Now() time.Time
+}
+
 // Dependencies aggregates interfaces to external systems. Add fields only when required.
-type Dependencies struct{}
+type Dependencies struct {
+	HTTPClient       HTTPDoer
+	WorldTidesAPIKey string
+	Clock            TimeSource
+}
 
 // Application owns HTTP request handling for the proxy API.
 type Application struct {
