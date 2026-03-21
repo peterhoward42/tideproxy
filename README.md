@@ -12,7 +12,8 @@ The authoritative product and API description lives in [`docs/specs/overview.md`
 
 ## Repository layout
 
-- **`main.go`** — Registers the HTTP handler and starts the framework (local default port `8080` unless `PORT` is set).
+- **`entry.go`** — Importable package `tideproxy` with the Cloud Functions HTTP entry point ([`TidesProxy`](entry.go)) that gcloud `--entry-point` must name.
+- **`cmd/tideproxy/main.go`** — Local binary: registers the same handler with the Functions Framework and listens on `PORT` or `8080`.
 - **`internal/app/`** — Request validation, upstream call, response mapping, CORS wrapper, and tests.
 - **`docs/specs/overview.md`** — Full API specification (JSON shapes, error codes, implementation notes).
 - **`docs/prompts/`** — Incremental prompts used to drive implementation; much of this codebase was built by working through those steps with Cursor agent skills applied for Go style, testing, and related conventions.

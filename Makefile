@@ -10,9 +10,8 @@ GCP_REGION ?= europe-west1
 # Cloud Function name from Google Cloud Console
 CF_NAME ?= tides-proxy
 
-# This name doesn't matter in the current URL config - because we serve just
-# one function on the root URL only.
-CF_ENTRY_POINT ?= unused-entry-point-name
+# Must match the exported HTTP handler in package tideproxy (see entry.go).
+CF_ENTRY_POINT ?= TidesProxy
 
 .PHONY: gotest runlocalproxysvr deploy examplerequestcommand startlocalproxysvrandfirerequest gcpsetup
 
@@ -32,7 +31,7 @@ gcpsetup:
 
 runlocalproxysvr:
 	@test -n "$$WORLDTIDES_API_KEY" || { echo >&2 "WORLDTIDES_API_KEY must be set"; exit 1; }
-	go run .
+	go run ./cmd/tideproxy
 
 deploy:
 	@test -n "$$WORLDTIDES_API_KEY" || { echo >&2 "WORLDTIDES_API_KEY must be set (used for --set-env-vars)"; exit 1; }
@@ -52,7 +51,7 @@ examplerequestcommand:
 startlocalproxysvrandfirerequest:
 	@test -n "$$WORLDTIDES_API_KEY" || { echo >&2 "WORLDTIDES_API_KEY must be set"; exit 1; }
 	@bash -euo pipefail -c '\
-		go run . & pid=$$!; \
+		go run ./cmd/tideproxy & pid=$$!; \
 		trap "kill $$pid 2>/dev/null || true" EXIT; \
 		for i in $$(seq 1 40); do \
 			if curl -sfS "http://127.0.0.1:8080/v1/tides?lat=51.5074&lon=-0.1278"; then \
