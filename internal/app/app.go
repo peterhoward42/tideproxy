@@ -1,8 +1,18 @@
 package app
 
 import (
+	"errors"
 	"net/http"
 	"time"
+)
+
+var (
+	// ErrNilHTTPClient is returned by [NewDependencies] when httpClient is nil.
+	ErrNilHTTPClient = errors.New("app: HTTPClient is required")
+	// ErrEmptyWorldTidesAPIKey is returned by [NewDependencies] when worldTidesAPIKey is empty.
+	ErrEmptyWorldTidesAPIKey = errors.New("app: WorldTidesAPIKey is required")
+	// ErrNilClock is returned by [NewDependencies] when clock is nil.
+	ErrNilClock = errors.New("app: Clock is required")
 )
 
 // HTTPDoer performs outbound HTTP requests. [*http.Client] satisfies HTTPDoer.
@@ -11,9 +21,16 @@ type HTTPDoer interface {
 }
 
 // TimeSource supplies the current instant for synthesising time-bounded upstream
-// requests. When nil on [Dependencies], wall clock time is used.
+// requests.
 type TimeSource interface {
 	Now() time.Time
+}
+
+// WallClock implements [TimeSource] using the system wall clock.
+type WallClock struct{}
+
+func (WallClock) Now() time.Time {
+	return time.Now()
 }
 
 // Dependencies aggregates interfaces to external systems. Add fields only when required.
@@ -21,6 +38,25 @@ type Dependencies struct {
 	HTTPClient       HTTPDoer
 	WorldTidesAPIKey string
 	Clock            TimeSource
+}
+
+// NewDependencies returns [Dependencies] with all fields set, or an error if httpClient or
+// clock is nil or worldTidesAPIKey is empty.
+func NewDependencies(httpClient HTTPDoer, worldTidesAPIKey string, clock TimeSource) (Dependencies, error) {
+	if httpClient == nil {
+		return Dependencies{}, ErrNilHTTPClient
+	}
+	if worldTidesAPIKey == "" {
+		return Dependencies{}, ErrEmptyWorldTidesAPIKey
+	}
+	if clock == nil {
+		return Dependencies{}, ErrNilClock
+	}
+	return Dependencies{
+		HTTPClient:       httpClient,
+		WorldTidesAPIKey: worldTidesAPIKey,
+		Clock:            clock,
+	}, nil
 }
 
 // Application owns HTTP request handling for the proxy API.

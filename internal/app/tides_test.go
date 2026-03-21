@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,15 @@ import (
 
 	"tideproxy/internal/app"
 )
+
+func mustNewDeps(t *testing.T, httpClient app.HTTPDoer, worldTidesAPIKey string, clock app.TimeSource) app.Dependencies {
+	t.Helper()
+	deps, err := app.NewDependencies(httpClient, worldTidesAPIKey, clock)
+	if err != nil {
+		t.Fatalf("NewDependencies: %v", err)
+	}
+	return deps
+}
 
 type fakeHTTPDoer struct {
 	doFn func(*http.Request) (*http.Response, error)
@@ -84,11 +94,7 @@ func TestApplication_handleTides_upstreamSuccessReturnsProxyJSON(t *testing.T) {
 		},
 	}
 
-	deps := app.Dependencies{
-		HTTPClient:       fake,
-		WorldTidesAPIKey: apiKey,
-		Clock:            fixedClock{t: at},
-	}
+	deps := mustNewDeps(t, fake, apiKey, fixedClock{t: at})
 	application := app.NewApplication(deps)
 
 	lat, lon := 51.5, -0.12
@@ -194,11 +200,13 @@ func TestApplication_handleTides_invalidQuery(t *testing.T) {
 			t.Parallel()
 
 			at := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
-			deps := app.Dependencies{
-				HTTPClient:       nil,
-				WorldTidesAPIKey: "key",
-				Clock:            fixedClock{t: at},
+			unreachable := &fakeHTTPDoer{
+				doFn: func(*http.Request) (*http.Response, error) {
+					t.Fatal("unexpected outbound HTTP request")
+					return nil, nil
+				},
 			}
+			deps := mustNewDeps(t, unreachable, "key", fixedClock{t: at})
 			application := app.NewApplication(deps)
 
 			req := httptest.NewRequest(http.MethodGet, tt.query, http.NoBody)
@@ -228,11 +236,7 @@ func TestApplication_handleTides_upstreamJSONDoesNotValidate(t *testing.T) {
 			}, nil
 		},
 	}
-	deps := app.Dependencies{
-		HTTPClient:       fake,
-		WorldTidesAPIKey: "k",
-		Clock:            fixedClock{t: at},
-	}
+	deps := mustNewDeps(t, fake, "k", fixedClock{t: at})
 	application := app.NewApplication(deps)
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/tides?lat=0&lon=0", http.NoBody)
@@ -260,11 +264,7 @@ func TestApplication_handleTides_upstreamMalformedJSON(t *testing.T) {
 			}, nil
 		},
 	}
-	deps := app.Dependencies{
-		HTTPClient:       fake,
-		WorldTidesAPIKey: "k",
-		Clock:            fixedClock{t: at},
-	}
+	deps := mustNewDeps(t, fake, "k", fixedClock{t: at})
 	application := app.NewApplication(deps)
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/tides?lat=0&lon=0", http.NoBody)
@@ -292,11 +292,7 @@ func TestApplication_handleTides_upstreamErrorStatus(t *testing.T) {
 			}, nil
 		},
 	}
-	deps := app.Dependencies{
-		HTTPClient:       fake,
-		WorldTidesAPIKey: "k",
-		Clock:            fixedClock{t: at},
-	}
+	deps := mustNewDeps(t, fake, "k", fixedClock{t: at})
 	application := app.NewApplication(deps)
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/tides?lat=0&lon=0", http.NoBody)
@@ -321,11 +317,7 @@ func TestApplication_handleTides_upstreamDoError(t *testing.T) {
 			return nil, io.ErrUnexpectedEOF
 		},
 	}
-	deps := app.Dependencies{
-		HTTPClient:       fake,
-		WorldTidesAPIKey: "k",
-		Clock:            fixedClock{t: at},
-	}
+	deps := mustNewDeps(t, fake, "k", fixedClock{t: at})
 	application := app.NewApplication(deps)
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/tides?lat=0&lon=0", http.NoBody)
@@ -341,51 +333,29 @@ func TestApplication_handleTides_upstreamDoError(t *testing.T) {
 	}
 }
 
-func TestApplication_handleTides_emptyAPIKey(t *testing.T) {
+func TestNewDependencies_emptyWorldTidesAPIKey(t *testing.T) {
 	t.Parallel()
-
 	at := time.Date(2021, 5, 5, 0, 0, 0, 0, time.UTC)
-	deps := app.Dependencies{
-		HTTPClient:       nil,
-		WorldTidesAPIKey: "",
-		Clock:            fixedClock{t: at},
-	}
-	application := app.NewApplication(deps)
-
-	req := httptest.NewRequest(http.MethodGet, "/v1/tides?lat=0&lon=0", http.NoBody)
-	rec := httptest.NewRecorder()
-	application.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("status: got %d want %d", rec.Code, http.StatusInternalServerError)
-	}
-	code, _ := mustDecodeAPIError(t, rec.Body.Bytes())
-	if code != "INTERNAL_ERROR" {
-		t.Fatalf("error code: got %q", code)
+	_, err := app.NewDependencies(http.DefaultClient, "", fixedClock{t: at})
+	if !errors.Is(err, app.ErrEmptyWorldTidesAPIKey) {
+		t.Fatalf("NewDependencies: got %v want %v", err, app.ErrEmptyWorldTidesAPIKey)
 	}
 }
 
-func TestApplication_handleTides_nilHTTPClient(t *testing.T) {
+func TestNewDependencies_nilHTTPClient(t *testing.T) {
 	t.Parallel()
-
 	at := time.Date(2021, 5, 5, 0, 0, 0, 0, time.UTC)
-	deps := app.Dependencies{
-		HTTPClient:       nil,
-		WorldTidesAPIKey: "configured",
-		Clock:            fixedClock{t: at},
+	_, err := app.NewDependencies(nil, "configured", fixedClock{t: at})
+	if !errors.Is(err, app.ErrNilHTTPClient) {
+		t.Fatalf("NewDependencies: got %v want %v", err, app.ErrNilHTTPClient)
 	}
-	application := app.NewApplication(deps)
+}
 
-	req := httptest.NewRequest(http.MethodGet, "/v1/tides?lat=0&lon=0", http.NoBody)
-	rec := httptest.NewRecorder()
-	application.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("status: got %d want %d", rec.Code, http.StatusInternalServerError)
-	}
-	code, _ := mustDecodeAPIError(t, rec.Body.Bytes())
-	if code != "INTERNAL_ERROR" {
-		t.Fatalf("error code: got %q", code)
+func TestNewDependencies_nilClock(t *testing.T) {
+	t.Parallel()
+	_, err := app.NewDependencies(http.DefaultClient, "k", nil)
+	if !errors.Is(err, app.ErrNilClock) {
+		t.Fatalf("NewDependencies: got %v want %v", err, app.ErrNilClock)
 	}
 }
 
@@ -402,11 +372,7 @@ func TestApplication_handleTides_defaultContentTypeWhenUpstreamOmits(t *testing.
 			}, nil
 		},
 	}
-	deps := app.Dependencies{
-		HTTPClient:       fake,
-		WorldTidesAPIKey: "k",
-		Clock:            fixedClock{t: at},
-	}
+	deps := mustNewDeps(t, fake, "k", fixedClock{t: at})
 	application := app.NewApplication(deps)
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/tides?lat=1&lon=2", http.NoBody)

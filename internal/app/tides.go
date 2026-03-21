@@ -17,10 +17,7 @@ var (
 )
 
 func (a *Application) refTime() time.Time {
-	if a.deps.Clock != nil {
-		return a.deps.Clock.Now()
-	}
-	return time.Now()
+	return a.deps.Clock.Now()
 }
 
 // handleTides serves GET /v1/tides by validating query parameters, building the
@@ -53,11 +50,6 @@ func (a *Application) handleTides(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeAPIError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
-		return
-	}
-
-	if a.deps.HTTPClient == nil {
-		writeAPIError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "HTTP client is not configured")
 		return
 	}
 
