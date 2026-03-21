@@ -16,7 +16,7 @@ func main() {
 		log.Fatalf("dependencies: %v", err)
 	}
 	application := app.NewApplication(deps)
-	funcframework.RegisterHTTPFunction("/", application.ServeHTTP)
+	funcframework.RegisterHTTPFunction("/", app.WithCORS(application))
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
