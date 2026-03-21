@@ -10,10 +10,13 @@ GCP_REGION ?= europe-west1
 # Cloud Function name from Google Cloud Console
 CF_NAME ?= tides-proxy
 
+# Deployed HTTPS base (no trailing slash); override if URL changes.
+EXAMPLE_REQUEST_CLOUD_BASE ?= https://europe-west1-tides-proxy.cloudfunctions.net/tides-proxy
+
 # Must match the exported HTTP handler in package tideproxy (see entry.go).
 CF_ENTRY_POINT ?= TidesProxy
 
-.PHONY: gotest runlocalproxysvr deploy examplerequestcommand startlocalproxysvrandfirerequest gcpsetup
+.PHONY: gotest runlocalproxysvr deploy examplerequestcommandlocal examplerequestcommandcloud startlocalproxysvrandfirerequest gcpsetup
 
 gotest:
 	go test ./...
@@ -46,6 +49,9 @@ deploy:
 		--set-env-vars=WORLDTIDES_API_KEY=$$WORLDTIDES_API_KEY
 
 # Requires a local server (e.g. make runlocalproxysvr in another terminal).
-examplerequestcommand:
-	@curl -sS "http://127.0.0.1:8080/v1/tides?lat=51.5074&lon=-0.1278"
+examplerequestcommandlocal:
+	@curl -sS "http://127.0.0.1:8080/v1/tides?lat=50.351365&lon=-4.448837"
 
+# Hits the deployed Cloud Function (see EXAMPLE_REQUEST_CLOUD_BASE).
+examplerequestcommandcloud:
+	@curl -sS "$(EXAMPLE_REQUEST_CLOUD_BASE)/v1/tides?lat=50.351365&lon=-4.448837"
