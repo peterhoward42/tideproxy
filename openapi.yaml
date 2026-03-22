@@ -1,0 +1,179 @@
+openapi: 3.0.3
+info:
+  title: Tide proxy API
+  version: "1.0.0"
+  description: |
+    Cut-down proxy to WorldTides extremes for a fixed location and time window.
+    Success responses use Chart Datum (CD), UTC times, and a window from 00:00 UTC
+    on the current calendar day through 00:00 UTC three calendar days later (exclusive).
+
+servers:
+  - url: https://europe-west1-tides-proxy.cloudfunctions.net/tides-proxy
+    description: Example deployed base (see Makefile EXAMPLE_REQUEST_CLOUD_BASE)
+  - url: http://127.0.0.1:8080
+    description: Local funcframework (default PORT)
+
+paths:
+  /v1/tides:
+    get:
+      summary: Tide extremes for a location
+      operationId: getTides
+      parameters:
+        - name: lat
+          in: query
+          required: true
+          schema:
+            type: number
+            format: double
+            minimum: -90
+            maximum: 90
+          description: Latitude in degrees.
+        - name: lon
+          in: query
+          required: true
+          schema:
+            type: number
+            format: double
+            minimum: -180
+            maximum: 180
+          description: Longitude in degrees.
+      responses:
+        "200":
+          description: Tide extremes for the configured UTC window.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TidesSuccess"
+        "400":
+          description: Invalid or missing query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIError"
+              examples:
+                invalidQuery:
+                  value:
+                    error:
+                      code: INVALID_QUERY
+                      message: missing required query parameter lat
+        "500":
+          description: |
+            Internal error (missing API key configuration, mapping failure, etc.).
+            Note: If the HTTP handler fails to initialize (e.g. missing configuration),
+            the response body may be plain text instead of this JSON shape.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIError"
+              examples:
+                internal:
+                  value:
+                    error:
+                      code: INTERNAL_ERROR
+                      message: WorldTides API key is not configured
+        "502":
+          description: Upstream request failed or response could not be parsed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIError"
+              examples:
+                upstream:
+                  value:
+                    error:
+                      code: UPSTREAM_ERROR
+                      message: Failed to retrieve tidal data
+    options:
+      summary: CORS preflight for GET /v1/tides
+      operationId: optionsTides
+      responses:
+        "204":
+          description: No content; CORS headers set on the response.
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+                example: "*"
+            Access-Control-Allow-Methods:
+              schema:
+                type: string
+                example: "GET, OPTIONS"
+            Access-Control-Allow-Headers:
+              schema:
+                type: string
+            Access-Control-Max-Age:
+              schema:
+                type: string
+                example: "86400"
+
+components:
+  schemas:
+    TideExtreme:
+      type: object
+      required:
+        - type
+        - time
+        - heightMetres
+      properties:
+        type:
+          type: string
+          enum: [High, Low]
+        time:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp in UTC (RFC 3339).
+        heightMetres:
+          type: number
+          format: double
+          description: Height in metres relative to Chart Datum (CD).
+      additionalProperties: false
+    TidesSuccess:
+      type: object
+      required:
+        - tides
+        - datum
+        - windowStart
+        - expiresAt
+        - attribution
+      properties:
+        tides:
+          type: array
+          items:
+            $ref: "#/components/schemas/TideExtreme"
+          description: Extremes sorted by time ascending.
+        datum:
+          type: string
+          enum: [CD]
+        windowStart:
+          type: string
+          format: date-time
+          description: Inclusive UTC start of the forecast window.
+        expiresAt:
+          type: string
+          format: date-time
+          description: Exclusive UTC end of the forecast window.
+        attribution:
+          type: string
+          description: Upstream copyright / attribution string.
+      additionalProperties: false
+    APIError:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              enum:
+                - INVALID_QUERY
+                - UPSTREAM_ERROR
+                - INTERNAL_ERROR
+            message:
+              type: string
+              description: Human-readable detail; exact text may vary for INVALID_QUERY and INTERNAL_ERROR.
+      additionalProperties: false
