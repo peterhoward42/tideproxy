@@ -36,15 +36,25 @@ Today in `handleTides` (`internal/app/tides.go`):
 
 All upstream failures (credits, bad operator key, no location, malformed body) collapse to the same client shape defined in `docs/specs/overview.md` and `openapi.yaml`.
 
-## Proposed direction (implementation sketch)
+## Step 1 findings (complete)
 
-Not for this doc’s scope to implement—order of work TBD across sessions:
+Confirmed upstream failure envelope and credit-detection policy (no live credit-exhaustion capture).
 
-1. **Confirm** real credit-exhaustion response: HTTP status, JSON `status`, exact `error` string (depleted account or WorldTides support).
+| Signal | Result |
+|--------|--------|
+| Failure JSON shape | `{"status":<int>,"error":"<string>"}` — same fields as apidocs |
+| HTTP vs JSON `status` | Align for invalid API key: HTTP **400**, JSON `status` **400** (re-probed 2026-05) |
+| Invalid API key `error` | `"API key is invalid"` — not a credit signal |
+| Credit exhaustion `error` | Exact string not captured; treat any upstream `error` containing **`credit`** (case-insensitive) as exhaustion |
+| Code | `internal/app/worldtides_upstream_error.go` — `ParseWorldTidesUpstreamError`, `CreditsExhausted()` |
+
+## Implementation plan
+
+1. ~~**Confirm** upstream failure envelope and credit-detection policy~~ (done — see **Step 1 findings**).
 2. **Spec / OpenAPI** — add error case (code name, HTTP status, message policy) to `docs/specs/overview.md` and `openapi.yaml`.
-3. **Upstream error parse** — lightweight decode of `{status, error}` on failed upstream calls (read body even when HTTP ≠ 2xx if JSON is present).
-4. **Handler mapping** — e.g. known credit `error` → dedicated code (e.g. `UPSTREAM_CREDITS_EXHAUSTED`) and **503** (service unavailable for callers); keep `UPSTREAM_ERROR` / **502** for other upstream failures; operator misconfiguration (e.g. invalid API key) → **500** / `INTERNAL_ERROR`.
-5. **Tests** — table-driven cases from captured or fixture upstream error bodies; keep `ParseIncomingResponse` focused on success only.
+3. **Upstream error parse** — use `ParseWorldTidesUpstreamError` on failed upstream calls (read body even when HTTP ≠ 2xx if JSON is present).
+4. **Handler mapping** — credit `error` → `UPSTREAM_CREDITS_EXHAUSTED` + **503**, message `Monthly API credits exhausted`; other upstream failures → `UPSTREAM_ERROR` / **502**; invalid operator API key → **500** / `INTERNAL_ERROR`.
+5. **Tests** — handler table-driven cases from fixture upstream error bodies; keep `ParseIncomingResponse` focused on success only.
 
 ## Open questions
 
