@@ -20,7 +20,8 @@ func TestSynthesiseOutputRequest_valid(t *testing.T) {
 		t.Fatal("expected non-nil OutputRequest")
 	}
 
-	wantStart := time.Date(at.Year(), at.Month(), at.Day(), 0, 0, 0, 0, time.UTC)
+	wantStart, wantExpires := utcTidesCoverageWindow(at)
+	wantLength := int64(wantExpires.Sub(wantStart) / time.Second)
 
 	if got.Scheme != "https" || got.Host != worldTidesHTTPSHost || got.Path != worldTidesAPIv3Path {
 		t.Fatalf("endpoint: got scheme=%q host=%q path=%q", got.Scheme, got.Host, got.Path)
@@ -37,8 +38,8 @@ func TestSynthesiseOutputRequest_valid(t *testing.T) {
 	if got.StartUnix != wantStart.Unix() {
 		t.Fatalf("StartUnix: got %d want %d", got.StartUnix, wantStart.Unix())
 	}
-	if got.LengthSeconds != outputWindowSeconds {
-		t.Fatalf("LengthSeconds: got %d want %d", got.LengthSeconds, outputWindowSeconds)
+	if got.LengthSeconds != wantLength {
+		t.Fatalf("LengthSeconds: got %d want %d", got.LengthSeconds, wantLength)
 	}
 }
 

@@ -26,8 +26,8 @@
 - Datum is fixed to Chart Datum (`CD`)
 - Times are returned in UTC
 - Coverage window:
-  - Start: 00:00:00 UTC today
-  - End: 00:00:00 UTC three days later (exclusive)
+  - Start: 00:00:00 UTC on the calendar day before today
+  - End: 00:00:00 UTC three days after today (exclusive)
 - No caching
 - Upstream attribution is included
 
@@ -42,7 +42,7 @@
     }
   ],
   "datum": "CD",
-  "windowStart": "2026-03-21T00:00:00Z",
+  "windowStart": "2026-03-20T00:00:00Z",
   "expiresAt": "2026-03-24T00:00:00Z",
   "attribution": "Tidal predictions covered by various copyrights."
 }

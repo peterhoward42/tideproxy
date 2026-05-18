@@ -10,10 +10,12 @@ const (
 	worldTidesAPIv3Path = "/api/v3"
 	chartDatum          = "CD"
 	heightUnitsMeters   = "meters"
-	// outputWindowDays is the number of full UTC calendar days covered by the
-	// extremes request: [today 00:00 UTC, today+outputWindowDays 00:00 UTC).
-	outputWindowDays    = 3
-	outputWindowSeconds = outputWindowDays * 24 * 60 * 60
+	// utcWindowLookbackDays is how many full UTC calendar days before today's
+	// midnight are included in the coverage interval.
+	utcWindowLookbackDays = 1
+	// utcWindowEndOffsetFromToday is added to today's UTC midnight to get the
+	// exclusive end instant (unchanged from the original three-day-forward spec).
+	utcWindowEndOffsetFromToday = 3
 )
 
 var errNilIncomingRequest = errors.New("incoming request is nil")
@@ -23,10 +25,11 @@ var errNilIncomingRequest = errors.New("incoming request is nil")
 // these fields with deployment configuration (for example the API key) when
 // building the outbound HTTP call.
 //
-// The time window matches the proxy specification: UTC midnight at the start of
-// the current calendar day, for outputWindowDays full days. WorldTides supports
-// a date parameter anchored to local midnight at the coordinates; this proxy
-// instead uses StartUnix and LengthSeconds so the window stays aligned to UTC.
+// The time window matches the proxy specification: from UTC midnight at the start
+// of the calendar day before the current day, through UTC midnight three calendar
+// days after today (exclusive). WorldTides supports a date parameter anchored to
+// local midnight at the coordinates; this proxy instead uses StartUnix and
+// LengthSeconds so the window stays aligned to UTC.
 type OutputRequest struct {
 	Scheme        string
 	Host          string
@@ -40,9 +43,19 @@ type OutputRequest struct {
 	LengthSeconds int64
 }
 
+// utcTidesCoverageWindow returns the inclusive start and exclusive end of the
+// proxy tide coverage interval for reference time at (docs/specs/overview.md).
+func utcTidesCoverageWindow(at time.Time) (windowStart, expiresAt time.Time) {
+	now := at.UTC()
+	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	windowStart = todayStart.AddDate(0, 0, -utcWindowLookbackDays)
+	expiresAt = todayStart.AddDate(0, 0, utcWindowEndOffsetFromToday)
+	return windowStart, expiresAt
+}
+
 // SynthesiseOutputRequest maps a validated [IncomingRequest] into an
 // [OutputRequest] for the WorldTides extremes endpoint. The coverage interval
-// is anchored to the UTC calendar date of at.
+// follows [utcTidesCoverageWindow] for at.
 func SynthesiseOutputRequest(in *IncomingRequest, at time.Time) (*OutputRequest, error) {
 	if in == nil {
 		return nil, errNilIncomingRequest
@@ -57,8 +70,8 @@ func SynthesiseOutputRequest(in *IncomingRequest, at time.Time) (*OutputRequest,
 		return nil, errLonOutOfRange
 	}
 
-	now := at.UTC()
-	windowStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	windowStart, expiresAt := utcTidesCoverageWindow(at)
+	lengthSeconds := int64(expiresAt.Sub(windowStart) / time.Second)
 
 	return &OutputRequest{
 		Scheme:        "https",
@@ -70,6 +83,6 @@ func SynthesiseOutputRequest(in *IncomingRequest, at time.Time) (*OutputRequest,
 		Units:         heightUnitsMeters,
 		Extremes:      true,
 		StartUnix:     windowStart.Unix(),
-		LengthSeconds: outputWindowSeconds,
+		LengthSeconds: lengthSeconds,
 	}, nil
 }

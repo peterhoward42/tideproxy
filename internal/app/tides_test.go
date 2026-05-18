@@ -127,7 +127,7 @@ func TestApplication_handleTides_upstreamSuccessReturnsProxyJSON(t *testing.T) {
 	if body.Datum != "CD" {
 		t.Fatalf("datum: got %q", body.Datum)
 	}
-	if body.WindowStart != "2026-03-21T00:00:00Z" || body.ExpiresAt != "2026-03-24T00:00:00Z" {
+	if body.WindowStart != "2026-03-20T00:00:00Z" || body.ExpiresAt != "2026-03-24T00:00:00Z" {
 		t.Fatalf("window: windowStart=%q expiresAt=%q", body.WindowStart, body.ExpiresAt)
 	}
 	if body.Attribution != "upstream attribution fixture" {

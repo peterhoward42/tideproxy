@@ -5,10 +5,11 @@ info:
   description: |
     Cut-down proxy to WorldTides extremes for a fixed location and time window.
     Success responses use Chart Datum (CD), UTC times, and a window from 00:00 UTC
-    on the current calendar day through 00:00 UTC three calendar days later (exclusive).
+    on the previous calendar day through 00:00 UTC three calendar days after today
+    (exclusive).
 
 servers:
-  - url: https://europe-west1-tides-proxy.cloudfunctions.net/tides-proxy
+  - url: 
     description: Example deployed base (see Makefile EXAMPLE_REQUEST_CLOUD_BASE)
   - url: http://127.0.0.1:8080
     description: Local funcframework (default PORT)

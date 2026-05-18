@@ -7,7 +7,7 @@ The authoritative human-readable product and API description lives in [`docs/spe
 ## What it does
 
 - **Endpoint:** `GET /v1/tides` with required query parameters `lat` and `lon` (valid ranges per the spec).
-- **Semantics:** Extremes only, datum fixed to Chart Datum (`CD`), times in UTC. The response window runs from 00:00 UTC today through 00:00 UTC three days later (exclusive). Invalid input yields `400` with a structured error; upstream failures yield `502`; some server-side failures yield `500` (see [`openapi.yaml`](openapi.yaml)).
+- **Semantics:** Extremes only, datum fixed to Chart Datum (`CD`), times in UTC. The response window runs from 00:00 UTC on the previous calendar day through 00:00 UTC three days after today (exclusive). Invalid input yields `400` with a structured error; upstream failures yield `502`; some server-side failures yield `500` (see [`openapi.yaml`](openapi.yaml)).
 - **Deployment shape:** Intended as a Google Cloud Function (2nd gen) using the Go [Functions Framework](https://github.com/GoogleCloudPlatform/functions-framework-go) with source-based deployment. The API key for WorldTides is supplied via the `WORLDTIDES_API_KEY` environment variable at runtime (see the spec for the full contract).
 
 ## Repository layout

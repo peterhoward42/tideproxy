@@ -25,17 +25,14 @@ type TidesAPIResponse struct {
 }
 
 // SynthesiseTidesAPIResponse maps a validated [IncomingResponse] into the proxy
-// API success model. The coverage window matches [SynthesiseOutputRequest]:
-// UTC midnight at the start of the calendar day of at, for outputWindowDays
-// full days; expiresAt is the exclusive end instant.
+// API success model. The coverage window matches [SynthesiseOutputRequest] via
+// [utcTidesCoverageWindow].
 func SynthesiseTidesAPIResponse(in *IncomingResponse, at time.Time) (*TidesAPIResponse, error) {
 	if in == nil {
 		return nil, errNilIncomingResponse
 	}
 
-	now := at.UTC()
-	windowStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-	expiresAt := windowStart.Add(time.Duration(outputWindowSeconds) * time.Second)
+	windowStart, expiresAt := utcTidesCoverageWindow(at)
 
 	tides := make([]TidesAPIExtreme, len(in.Extremes))
 	for i := range in.Extremes {

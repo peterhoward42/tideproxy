@@ -21,7 +21,7 @@ func TestBuildOutputHTTPRequest_valid(t *testing.T) {
 		Units:         heightUnitsMeters,
 		Extremes:      true,
 		StartUnix:     1700000000,
-		LengthSeconds: 259200,
+		LengthSeconds: 345600,
 	}
 
 	req, err := BuildOutputHTTPRequest(ctx, out, "test-api-key")
@@ -60,7 +60,7 @@ func TestBuildOutputHTTPRequest_valid(t *testing.T) {
 	if got := q.Get("start"); got != "1700000000" {
 		t.Fatalf("start: got %q", got)
 	}
-	if got := q.Get("length"); got != "259200" {
+	if got := q.Get("length"); got != "345600" {
 		t.Fatalf("length: got %q", got)
 	}
 

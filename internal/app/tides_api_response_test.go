@@ -17,9 +17,8 @@ func TestSynthesiseTidesAPIResponse_mapsFieldsAndWindow(t *testing.T) {
 	t.Parallel()
 
 	at := time.Date(2026, 3, 21, 15, 30, 0, 0, time.UTC)
-	// Window follows overview.md and matches outputWindowDays from output_request.go.
-	wantWindowStart := time.Date(2026, 3, 21, 0, 0, 0, 0, time.UTC)
-	wantExpiresAt := wantWindowStart.Add(outputWindowDays * 24 * time.Hour)
+	// Window follows overview.md and [utcTidesCoverageWindow].
+	wantWindowStart, wantExpiresAt := utcTidesCoverageWindow(at)
 
 	tHigh := time.Date(2026, 3, 21, 6, 12, 0, 0, time.UTC)
 	in := IncomingResponse{
