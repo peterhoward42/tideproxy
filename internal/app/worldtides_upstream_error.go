@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net/http"
 	"strings"
 )
 
@@ -57,8 +58,29 @@ func ParseWorldTidesUpstreamError(data []byte) (WorldTidesUpstreamError, error) 
 	}, nil
 }
 
+const worldTidesErrorInvalidAPIKey = "API key is invalid"
+
 // CreditsExhausted reports whether the upstream error indicates operator quota
 // exhaustion (substring "credit", case-insensitive).
 func (e WorldTidesUpstreamError) CreditsExhausted() bool {
 	return strings.Contains(strings.ToLower(e.Error), "credit")
+}
+
+// InvalidAPIKey reports whether the upstream error indicates a misconfigured
+// operator API key.
+func (e WorldTidesUpstreamError) InvalidAPIKey() bool {
+	return e.Error == worldTidesErrorInvalidAPIKey
+}
+
+// ProxyErrorForWorldTidesUpstream maps a parsed upstream failure to proxy API
+// error response fields per docs/specs/overview.md.
+func ProxyErrorForWorldTidesUpstream(e WorldTidesUpstreamError) (httpStatus int, code, message string) {
+	switch {
+	case e.CreditsExhausted():
+		return http.StatusServiceUnavailable, "UPSTREAM_CREDITS_EXHAUSTED", "Monthly API credits exhausted"
+	case e.InvalidAPIKey():
+		return http.StatusInternalServerError, "INTERNAL_ERROR", "WorldTides API key is invalid"
+	default:
+		return http.StatusBadGateway, "UPSTREAM_ERROR", "Failed to retrieve tidal data"
+	}
 }

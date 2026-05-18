@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"net/http"
 	"testing"
 )
 
@@ -50,6 +51,52 @@ func TestWorldTidesUpstreamError_CreditsExhausted(t *testing.T) {
 			e := WorldTidesUpstreamError{Status: 400, Error: tt.error}
 			if got := e.CreditsExhausted(); got != tt.want {
 				t.Fatalf("CreditsExhausted() = %v, want %v for error %q", got, tt.want, tt.error)
+			}
+		})
+	}
+}
+
+func TestProxyErrorForWorldTidesUpstream(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		upstream   WorldTidesUpstreamError
+		wantStatus int
+		wantCode   string
+		wantMsg    string
+	}{
+		{
+			name:       "credits exhausted",
+			upstream:   WorldTidesUpstreamError{Status: 400, Error: "Not enough credits"},
+			wantStatus: http.StatusServiceUnavailable,
+			wantCode:   "UPSTREAM_CREDITS_EXHAUSTED",
+			wantMsg:    "Monthly API credits exhausted",
+		},
+		{
+			name:       "invalid api key",
+			upstream:   WorldTidesUpstreamError{Status: 400, Error: worldTidesErrorInvalidAPIKey},
+			wantStatus: http.StatusInternalServerError,
+			wantCode:   "INTERNAL_ERROR",
+			wantMsg:    "WorldTides API key is invalid",
+		},
+		{
+			name:       "other upstream error",
+			upstream:   WorldTidesUpstreamError{Status: 400, Error: "No location found"},
+			wantStatus: http.StatusBadGateway,
+			wantCode:   "UPSTREAM_ERROR",
+			wantMsg:    "Failed to retrieve tidal data",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			status, code, msg := ProxyErrorForWorldTidesUpstream(tt.upstream)
+			if status != tt.wantStatus || code != tt.wantCode || msg != tt.wantMsg {
+				t.Fatalf("ProxyErrorForWorldTidesUpstream() = (%d, %q, %q) want (%d, %q, %q)",
+					status, code, msg, tt.wantStatus, tt.wantCode, tt.wantMsg)
 			}
 		})
 	}

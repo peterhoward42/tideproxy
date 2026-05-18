@@ -60,20 +60,20 @@ func (a *Application) handleTides(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		writeAPIError(w, http.StatusBadGateway, "UPSTREAM_ERROR", "Failed to retrieve tidal data")
-		return
-	}
-
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		writeAPIError(w, http.StatusBadGateway, "UPSTREAM_ERROR", "Failed to retrieve tidal data")
 		return
 	}
 
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		writeWorldTidesUpstreamFailure(w, body)
+		return
+	}
+
 	inResp, err := ParseIncomingResponse(body)
 	if err != nil {
-		writeAPIError(w, http.StatusBadGateway, "UPSTREAM_ERROR", "Failed to retrieve tidal data")
+		writeWorldTidesUpstreamFailure(w, body)
 		return
 	}
 
@@ -112,6 +112,16 @@ type apiErrorResponse struct {
 		Code    string `json:"code"`
 		Message string `json:"message"`
 	} `json:"error"`
+}
+
+func writeWorldTidesUpstreamFailure(w http.ResponseWriter, body []byte) {
+	upstreamErr, err := ParseWorldTidesUpstreamError(body)
+	if err != nil {
+		writeAPIError(w, http.StatusBadGateway, "UPSTREAM_ERROR", "Failed to retrieve tidal data")
+		return
+	}
+	status, code, message := ProxyErrorForWorldTidesUpstream(upstreamErr)
+	writeAPIError(w, status, code, message)
 }
 
 func writeAPIError(w http.ResponseWriter, status int, code, message string) {

@@ -280,31 +280,90 @@ func TestApplication_handleTides_upstreamMalformedJSON(t *testing.T) {
 	}
 }
 
-func TestApplication_handleTides_upstreamErrorStatus(t *testing.T) {
+func TestApplication_handleTides_upstreamFailureMapping(t *testing.T) {
 	t.Parallel()
 
-	at := time.Date(2021, 5, 5, 0, 0, 0, 0, time.UTC)
-	fake := &fakeHTTPDoer{
-		doFn: func(*http.Request) (*http.Response, error) {
-			return &http.Response{
-				StatusCode: http.StatusServiceUnavailable,
-				Body:       io.NopCloser(strings.NewReader("unavailable")),
-			}, nil
+	const invalidAPIKeyBody = `{"status":400,"error":"API key is invalid"}`
+
+	tests := []struct {
+		name           string
+		httpStatus     int
+		body           string
+		wantHTTPStatus int
+		wantCode       string
+		wantMessage    string
+	}{
+		{
+			name:           "non-2xx credits exhausted",
+			httpStatus:     http.StatusBadRequest,
+			body:           `{"status":400,"error":"Not enough credits"}`,
+			wantHTTPStatus: http.StatusServiceUnavailable,
+			wantCode:       "UPSTREAM_CREDITS_EXHAUSTED",
+			wantMessage:    "Monthly API credits exhausted",
+		},
+		{
+			name:           "non-2xx invalid api key",
+			httpStatus:     http.StatusBadRequest,
+			body:           invalidAPIKeyBody,
+			wantHTTPStatus: http.StatusInternalServerError,
+			wantCode:       "INTERNAL_ERROR",
+			wantMessage:    "WorldTides API key is invalid",
+		},
+		{
+			name:           "non-2xx other upstream error",
+			httpStatus:     http.StatusBadRequest,
+			body:           `{"status":400,"error":"No location found"}`,
+			wantHTTPStatus: http.StatusBadGateway,
+			wantCode:       "UPSTREAM_ERROR",
+			wantMessage:    "Failed to retrieve tidal data",
+		},
+		{
+			name:           "2xx body with upstream failure json",
+			httpStatus:     http.StatusOK,
+			body:           `{"status":400,"error":"Monthly API credits exhausted"}`,
+			wantHTTPStatus: http.StatusServiceUnavailable,
+			wantCode:       "UPSTREAM_CREDITS_EXHAUSTED",
+			wantMessage:    "Monthly API credits exhausted",
+		},
+		{
+			name:           "non-2xx unparseable body",
+			httpStatus:     http.StatusServiceUnavailable,
+			body:           "unavailable",
+			wantHTTPStatus: http.StatusBadGateway,
+			wantCode:       "UPSTREAM_ERROR",
+			wantMessage:    "Failed to retrieve tidal data",
 		},
 	}
-	deps := mustNewDeps(t, fake, "k", fixedClock{t: at})
-	application := app.NewApplication(deps)
 
-	req := httptest.NewRequest(http.MethodGet, "/v1/tides?lat=0&lon=0", http.NoBody)
-	rec := httptest.NewRecorder()
-	application.ServeHTTP(rec, req)
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-	if rec.Code != http.StatusBadGateway {
-		t.Fatalf("status: got %d want %d", rec.Code, http.StatusBadGateway)
-	}
-	code, msg := mustDecodeAPIError(t, rec.Body.Bytes())
-	if code != "UPSTREAM_ERROR" || msg != "Failed to retrieve tidal data" {
-		t.Fatalf("error: code=%q msg=%q", code, msg)
+			at := time.Date(2021, 5, 5, 0, 0, 0, 0, time.UTC)
+			fake := &fakeHTTPDoer{
+				doFn: func(*http.Request) (*http.Response, error) {
+					return &http.Response{
+						StatusCode: tt.httpStatus,
+						Body:       io.NopCloser(strings.NewReader(tt.body)),
+					}, nil
+				},
+			}
+			deps := mustNewDeps(t, fake, "k", fixedClock{t: at})
+			application := app.NewApplication(deps)
+
+			req := httptest.NewRequest(http.MethodGet, "/v1/tides?lat=0&lon=0", http.NoBody)
+			rec := httptest.NewRecorder()
+			application.ServeHTTP(rec, req)
+
+			if rec.Code != tt.wantHTTPStatus {
+				t.Fatalf("status: got %d want %d body=%q", rec.Code, tt.wantHTTPStatus, rec.Body.String())
+			}
+			code, msg := mustDecodeAPIError(t, rec.Body.Bytes())
+			if code != tt.wantCode || msg != tt.wantMessage {
+				t.Fatalf("error: code=%q msg=%q want code=%q msg=%q", code, msg, tt.wantCode, tt.wantMessage)
+			}
+		})
 	}
 }
 
