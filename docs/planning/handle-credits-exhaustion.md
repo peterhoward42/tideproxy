@@ -51,7 +51,7 @@ Confirmed upstream failure envelope and credit-detection policy (no live credit-
 ## Implementation plan
 
 1. ~~**Confirm** upstream failure envelope and credit-detection policy~~ (done — see **Step 1 findings**).
-2. **Spec / OpenAPI** — add error case (code name, HTTP status, message policy) to `docs/specs/overview.md` and `openapi.yaml`.
+2. ~~**Spec / OpenAPI** — add error case to `docs/specs/overview.md` and `openapi.yaml`~~ (done: **503**, `UPSTREAM_CREDITS_EXHAUSTED`, fixed message `Monthly API credits exhausted`).
 3. **Upstream error parse** — use `ParseWorldTidesUpstreamError` on failed upstream calls (read body even when HTTP ≠ 2xx if JSON is present).
 4. **Handler mapping** — credit `error` → `UPSTREAM_CREDITS_EXHAUSTED` + **503**, message `Monthly API credits exhausted`; other upstream failures → `UPSTREAM_ERROR` / **502**; invalid operator API key → **500** / `INTERNAL_ERROR`.
 5. **Tests** — handler table-driven cases from fixture upstream error bodies; keep `ParseIncomingResponse` focused on success only.

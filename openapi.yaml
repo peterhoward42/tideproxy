@@ -73,7 +73,7 @@ paths:
                       code: INTERNAL_ERROR
                       message: WorldTides API key is not configured
         "502":
-          description: Upstream request failed or response could not be parsed.
+          description: Upstream request failed or response could not be parsed (excluding operator credit exhaustion).
           content:
             application/json:
               schema:
@@ -84,6 +84,20 @@ paths:
                     error:
                       code: UPSTREAM_ERROR
                       message: Failed to retrieve tidal data
+        "503":
+          description: |
+            WorldTides operator quota exhausted (proxy API key has no credits).
+            Not caused by invalid caller query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIError"
+              examples:
+                creditsExhausted:
+                  value:
+                    error:
+                      code: UPSTREAM_CREDITS_EXHAUSTED
+                      message: Monthly API credits exhausted
     options:
       summary: CORS preflight for GET /v1/tides
       operationId: optionsTides
@@ -173,8 +187,11 @@ components:
               enum:
                 - INVALID_QUERY
                 - UPSTREAM_ERROR
+                - UPSTREAM_CREDITS_EXHAUSTED
                 - INTERNAL_ERROR
             message:
               type: string
-              description: Human-readable detail; exact text may vary for INVALID_QUERY and INTERNAL_ERROR.
+              description: |
+                Human-readable detail. Exact text may vary for INVALID_QUERY and INTERNAL_ERROR.
+                UPSTREAM_CREDITS_EXHAUSTED always uses the fixed message "Monthly API credits exhausted".
       additionalProperties: false

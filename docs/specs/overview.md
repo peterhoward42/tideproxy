@@ -73,7 +73,7 @@ Invalid or missing query parameters.
 ```
 
 ### 502 Bad Gateway
-Upstream request failed.
+Upstream request failed (network, non-credit upstream failure, or unparseable upstream response).
 
 ```json
 {
@@ -83,6 +83,20 @@ Upstream request failed.
   }
 }
 ```
+
+### 503 Service Unavailable
+WorldTides operator quota exhausted (the proxy’s configured API key has no credits left). Not caused by invalid caller input.
+
+```json
+{
+  "error": {
+    "code": "UPSTREAM_CREDITS_EXHAUSTED",
+    "message": "Monthly API credits exhausted"
+  }
+}
+```
+
+The `message` for this code is fixed; upstream `error` text is not forwarded to clients.
 
 # Implementation
 
