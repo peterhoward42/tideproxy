@@ -26,12 +26,13 @@ Create the Telegram **send** capability (bot token and chat identifier from envi
 
 Emit the message **only** when handling the WorldTides **quota exhaustion** path — the same predicate used for credit exhaustion elsewhere (not on every request).
 
-### Iteration 3
+### Iteration 3 (implemented)
 
 **Persisted dedupe via GCS:**
 
-- Provision or designate a bucket (and object key) for this single piece of state; grant the function service account minimal object access on that path.
-- On exhaustion: read the object (treat missing object as “never sent”). If the current **UTC calendar hour** matches the stored last-sent hour, skip Telegram. Otherwise send; on **success**, write the new hour back to the object.
+- Provision or designate a bucket (and object path) for this single piece of state; grant the function service account minimal object access on that path.
+- Runtime configuration (deploy env vars, same pattern as Telegram secrets): `TELEGRAM_ALERT_STATE_BUCKET` (bucket name) and `TELEGRAM_ALERT_STATE_PATH` (object path within the bucket, e.g. `telegram-quota-alert/last-sent-hour.txt`). Payload: plain text UTC calendar hour `2006-01-02T15`.
+- On exhaustion: read the object at that path (treat missing object as “never sent”). If the current **UTC calendar hour** matches the stored last-sent hour, skip Telegram. Otherwise send; on **success**, write the new hour back to the object.
 - Optional later tightening: GCS generation preconditions to reduce same-hour double-send under concurrent invocations — not required for the initial simple story.
 
 ## Open operational notes

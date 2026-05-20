@@ -3,6 +3,8 @@
 #
 # runlocalproxysvr and deploy require exported secrets (see README):
 #   WORLDTIDES_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+# Deploy also accepts (optional locally; set both for cloud dedupe):
+#   TELEGRAM_ALERT_STATE_BUCKET, TELEGRAM_ALERT_STATE_PATH
 # Example: set -a && source .env && set +a
 
 GCP_PROJECT_ID = tides-proxy
@@ -24,7 +26,8 @@ gcpsetup:
 		cloudbuild.googleapis.com \
 		cloudfunctions.googleapis.com \
 		run.googleapis.com \
-		logging.googleapis.com
+		logging.googleapis.com \
+		storage.googleapis.com
 
 runlocalproxysvr: require-runtime-secrets
 	go run ./cmd/tideproxy
@@ -38,7 +41,7 @@ deploy: require-runtime-secrets
 		--entry-point=$(CF_ENTRY_POINT) \
 		--trigger-http \
 		--allow-unauthenticated \
-		--set-env-vars=WORLDTIDES_API_KEY=$$WORLDTIDES_API_KEY,TELEGRAM_BOT_TOKEN=$$TELEGRAM_BOT_TOKEN,TELEGRAM_CHAT_ID=$$TELEGRAM_CHAT_ID
+		--set-env-vars=WORLDTIDES_API_KEY=$$WORLDTIDES_API_KEY,TELEGRAM_BOT_TOKEN=$$TELEGRAM_BOT_TOKEN,TELEGRAM_CHAT_ID=$$TELEGRAM_CHAT_ID,TELEGRAM_ALERT_STATE_BUCKET=$$TELEGRAM_ALERT_STATE_BUCKET,TELEGRAM_ALERT_STATE_PATH=$$TELEGRAM_ALERT_STATE_PATH
 
 # Requires runlocalproxysvr in another terminal (after sourcing .env — see README).
 examplerequestcommandlocal:

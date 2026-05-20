@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -125,9 +124,7 @@ func (a *Application) writeWorldTidesUpstreamFailure(ctx context.Context, w http
 		return
 	}
 	if upstreamErr.CreditsExhausted() {
-		if err := a.deps.Telegram.Send(ctx, telegramCreditsExhaustedAlert); err != nil {
-			log.Printf("telegram: %v", err)
-		}
+		a.notifyTelegramCreditsExhausted(ctx)
 	}
 	status, code, message := ProxyErrorForWorldTidesUpstream(upstreamErr)
 	writeAPIError(w, status, code, message)

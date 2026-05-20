@@ -35,15 +35,17 @@ func (WallClock) Now() time.Time {
 
 // Dependencies aggregates interfaces to external systems. Add fields only when required.
 type Dependencies struct {
-	HTTPClient       HTTPDoer
-	WorldTidesAPIKey string
-	Clock            TimeSource
-	Telegram         TelegramNotifier
+	HTTPClient          HTTPDoer
+	WorldTidesAPIKey    string
+	Clock               TimeSource
+	Telegram            TelegramNotifier
+	TelegramAlertState  TelegramAlertStateStore
 }
 
 // NewDependencies returns [Dependencies] with all fields set, or an error if httpClient,
-// clock, or telegram is nil or worldTidesAPIKey is empty.
-func NewDependencies(httpClient HTTPDoer, worldTidesAPIKey string, clock TimeSource, telegram TelegramNotifier) (Dependencies, error) {
+// clock, or telegram is nil or worldTidesAPIKey is empty. telegramAlertState nil selects
+// [NoopTelegramAlertStateStore] (no GCS dedupe).
+func NewDependencies(httpClient HTTPDoer, worldTidesAPIKey string, clock TimeSource, telegram TelegramNotifier, telegramAlertState TelegramAlertStateStore) (Dependencies, error) {
 	if httpClient == nil {
 		return Dependencies{}, ErrNilHTTPClient
 	}
@@ -56,11 +58,15 @@ func NewDependencies(httpClient HTTPDoer, worldTidesAPIKey string, clock TimeSou
 	if telegram == nil {
 		return Dependencies{}, ErrNilTelegramNotifier
 	}
+	if telegramAlertState == nil {
+		telegramAlertState = NoopTelegramAlertStateStore{}
+	}
 	return Dependencies{
-		HTTPClient:       httpClient,
-		WorldTidesAPIKey: worldTidesAPIKey,
-		Clock:            clock,
-		Telegram:         telegram,
+		HTTPClient:         httpClient,
+		WorldTidesAPIKey:   worldTidesAPIKey,
+		Clock:              clock,
+		Telegram:           telegram,
+		TelegramAlertState: telegramAlertState,
 	}, nil
 }
 

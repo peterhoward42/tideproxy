@@ -18,7 +18,7 @@ import (
 
 func mustNewDeps(t *testing.T, httpClient app.HTTPDoer, worldTidesAPIKey string, clock app.TimeSource) app.Dependencies {
 	t.Helper()
-	deps, err := app.NewDependencies(httpClient, worldTidesAPIKey, clock, noopTelegramNotifier{})
+	deps, err := app.NewDependencies(httpClient, worldTidesAPIKey, clock, noopTelegramNotifier{}, nil)
 	if err != nil {
 		t.Fatalf("NewDependencies: %v", err)
 	}
@@ -366,7 +366,7 @@ func TestApplication_handleTides_upstreamFailureMapping(t *testing.T) {
 				},
 			}
 			telegram := &recordingTelegramNotifier{}
-			deps, err := app.NewDependencies(fake, "k", fixedClock{t: at}, telegram)
+			deps, err := app.NewDependencies(fake, "k", fixedClock{t: at}, telegram, nil)
 			if err != nil {
 				t.Fatalf("NewDependencies: %v", err)
 			}
@@ -422,7 +422,7 @@ func TestApplication_handleTides_upstreamDoError(t *testing.T) {
 func TestNewDependencies_emptyWorldTidesAPIKey(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2021, 5, 5, 0, 0, 0, 0, time.UTC)
-	_, err := app.NewDependencies(http.DefaultClient, "", fixedClock{t: at}, noopTelegramNotifier{})
+	_, err := app.NewDependencies(http.DefaultClient, "", fixedClock{t: at}, noopTelegramNotifier{}, nil)
 	if !errors.Is(err, app.ErrEmptyWorldTidesAPIKey) {
 		t.Fatalf("NewDependencies: got %v want %v", err, app.ErrEmptyWorldTidesAPIKey)
 	}
@@ -431,7 +431,7 @@ func TestNewDependencies_emptyWorldTidesAPIKey(t *testing.T) {
 func TestNewDependencies_nilHTTPClient(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2021, 5, 5, 0, 0, 0, 0, time.UTC)
-	_, err := app.NewDependencies(nil, "configured", fixedClock{t: at}, noopTelegramNotifier{})
+	_, err := app.NewDependencies(nil, "configured", fixedClock{t: at}, noopTelegramNotifier{}, nil)
 	if !errors.Is(err, app.ErrNilHTTPClient) {
 		t.Fatalf("NewDependencies: got %v want %v", err, app.ErrNilHTTPClient)
 	}
@@ -439,7 +439,7 @@ func TestNewDependencies_nilHTTPClient(t *testing.T) {
 
 func TestNewDependencies_nilClock(t *testing.T) {
 	t.Parallel()
-	_, err := app.NewDependencies(http.DefaultClient, "k", nil, noopTelegramNotifier{})
+	_, err := app.NewDependencies(http.DefaultClient, "k", nil, noopTelegramNotifier{}, nil)
 	if !errors.Is(err, app.ErrNilClock) {
 		t.Fatalf("NewDependencies: got %v want %v", err, app.ErrNilClock)
 	}
@@ -448,10 +448,61 @@ func TestNewDependencies_nilClock(t *testing.T) {
 func TestNewDependencies_nilTelegramNotifier(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2021, 5, 5, 0, 0, 0, 0, time.UTC)
-	_, err := app.NewDependencies(http.DefaultClient, "k", fixedClock{t: at}, nil)
+	_, err := app.NewDependencies(http.DefaultClient, "k", fixedClock{t: at}, nil, nil)
 	if !errors.Is(err, app.ErrNilTelegramNotifier) {
 		t.Fatalf("NewDependencies: got %v want %v", err, app.ErrNilTelegramNotifier)
 	}
+}
+
+func TestApplication_handleTides_skipsTelegramWhenAlreadySentThisHour(t *testing.T) {
+	t.Parallel()
+
+	at := time.Date(2021, 5, 5, 14, 30, 0, 0, time.UTC)
+	body := `{"status":400,"error":"Not enough credits"}`
+	fake := &fakeHTTPDoer{
+		doFn: func(*http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusBadRequest,
+				Body:       io.NopCloser(strings.NewReader(body)),
+			}, nil
+		},
+	}
+	telegram := &recordingTelegramNotifier{}
+	state := &memoryTelegramAlertStateStore{lastSent: "2021-05-05T14"}
+	deps, err := app.NewDependencies(fake, "k", fixedClock{t: at}, telegram, state)
+	if err != nil {
+		t.Fatalf("NewDependencies: %v", err)
+	}
+	application := app.NewApplication(deps)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/tides?lat=0&lon=0", http.NoBody)
+	rec := httptest.NewRecorder()
+	application.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status: got %d want %d", rec.Code, http.StatusServiceUnavailable)
+	}
+	if len(telegram.texts) != 0 {
+		t.Fatalf("telegram texts: got %v want none (deduped)", telegram.texts)
+	}
+	if len(state.writes) != 0 {
+		t.Fatalf("state writes: got %v want none", state.writes)
+	}
+}
+
+type memoryTelegramAlertStateStore struct {
+	lastSent string
+	writes   []string
+}
+
+func (m *memoryTelegramAlertStateStore) ReadLastSentHour(context.Context) (string, error) {
+	return m.lastSent, nil
+}
+
+func (m *memoryTelegramAlertStateStore) WriteLastSentHour(_ context.Context, hour string) error {
+	m.writes = append(m.writes, hour)
+	m.lastSent = hour
+	return nil
 }
 
 func TestApplication_ServeHTTP_doesNotNotifyTelegram(t *testing.T) {
@@ -466,6 +517,7 @@ func TestApplication_ServeHTTP_doesNotNotifyTelegram(t *testing.T) {
 		"key",
 		fixedClock{t: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)},
 		telegram,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("NewDependencies: %v", err)

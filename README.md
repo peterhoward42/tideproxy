@@ -43,3 +43,28 @@ make examplerequestcommandlocal
 ```
 
 The same variables must be exported for `make deploy` (passed through to the function as Cloud env vars).
+
+### Telegram quota alerts (GCS dedupe)
+
+When WorldTides credits are exhausted, the function can send a Telegram alert. In production, set both:
+
+- `TELEGRAM_ALERT_STATE_BUCKET` — GCS bucket (e.g. `tides-proxy-telegram-alert-state`, globally unique)
+- `TELEGRAM_ALERT_STATE_PATH` — object path in that bucket (e.g. `telegram-quota-alert/last-sent-hour.txt`)
+
+The object stores the UTC calendar hour (`2006-01-02T15`) of the last **successful** alert so at most one message is sent per hour. Omit both variables locally to skip GCS (alerts still fire on every exhaustion, as in iteration 2).
+
+Provision once per project (replace bucket name if taken):
+
+```bash
+export GCP_PROJECT_ID=tides-proxy
+export TELEGRAM_ALERT_STATE_BUCKET=tides-proxy-telegram-alert-state
+export TELEGRAM_ALERT_STATE_PATH=telegram-quota-alert/last-sent-hour.txt
+
+gcloud config set project "$GCP_PROJECT_ID"
+gcloud storage buckets create "gs://${TELEGRAM_ALERT_STATE_BUCKET}" --location=europe-west1
+
+# After deploy, grant the function's runtime service account object access on that path
+# (default compute SA: PROJECT_NUMBER-compute@developer.gserviceaccount.com)
+```
+
+`make gcpsetup` enables the Storage API. `make deploy` passes the bucket and path env vars when exported.
