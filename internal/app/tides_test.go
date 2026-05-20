@@ -305,6 +305,7 @@ func TestApplication_handleTides_upstreamFailureMapping(t *testing.T) {
 		wantHTTPStatus int
 		wantCode       string
 		wantMessage    string
+		wantTelegram   bool
 	}{
 		{
 			name:           "non-2xx credits exhausted",
@@ -313,6 +314,7 @@ func TestApplication_handleTides_upstreamFailureMapping(t *testing.T) {
 			wantHTTPStatus: http.StatusServiceUnavailable,
 			wantCode:       "UPSTREAM_CREDITS_EXHAUSTED",
 			wantMessage:    "Monthly API credits exhausted",
+			wantTelegram:   true,
 		},
 		{
 			name:           "non-2xx invalid api key",
@@ -337,6 +339,7 @@ func TestApplication_handleTides_upstreamFailureMapping(t *testing.T) {
 			wantHTTPStatus: http.StatusServiceUnavailable,
 			wantCode:       "UPSTREAM_CREDITS_EXHAUSTED",
 			wantMessage:    "Monthly API credits exhausted",
+			wantTelegram:   true,
 		},
 		{
 			name:           "non-2xx unparseable body",
@@ -362,7 +365,11 @@ func TestApplication_handleTides_upstreamFailureMapping(t *testing.T) {
 					}, nil
 				},
 			}
-			deps := mustNewDeps(t, fake, "k", fixedClock{t: at})
+			telegram := &recordingTelegramNotifier{}
+			deps, err := app.NewDependencies(fake, "k", fixedClock{t: at}, telegram)
+			if err != nil {
+				t.Fatalf("NewDependencies: %v", err)
+			}
 			application := app.NewApplication(deps)
 
 			req := httptest.NewRequest(http.MethodGet, "/v1/tides?lat=0&lon=0", http.NoBody)
@@ -375,6 +382,13 @@ func TestApplication_handleTides_upstreamFailureMapping(t *testing.T) {
 			code, msg := mustDecodeAPIError(t, rec.Body.Bytes())
 			if code != tt.wantCode || msg != tt.wantMessage {
 				t.Fatalf("error: code=%q msg=%q want code=%q msg=%q", code, msg, tt.wantCode, tt.wantMessage)
+			}
+			if tt.wantTelegram {
+				if len(telegram.texts) != 1 || telegram.texts[0] != "tideproxy: WorldTides monthly API credits exhausted" {
+					t.Fatalf("telegram texts: got %v want one credits-exhausted alert", telegram.texts)
+				}
+			} else if len(telegram.texts) != 0 {
+				t.Fatalf("telegram texts: got %v want none", telegram.texts)
 			}
 		})
 	}
@@ -440,7 +454,7 @@ func TestNewDependencies_nilTelegramNotifier(t *testing.T) {
 	}
 }
 
-func TestApplication_ServeHTTP_notifiesTelegramOnEveryRequest(t *testing.T) {
+func TestApplication_ServeHTTP_doesNotNotifyTelegram(t *testing.T) {
 	t.Parallel()
 
 	telegram := &recordingTelegramNotifier{}
@@ -465,8 +479,8 @@ func TestApplication_ServeHTTP_notifiesTelegramOnEveryRequest(t *testing.T) {
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status: got %d want %d", rec.Code, http.StatusNotFound)
 	}
-	if len(telegram.texts) != 1 || telegram.texts[0] != "tideproxy request received" {
-		t.Fatalf("telegram texts: got %v want [tideproxy request received]", telegram.texts)
+	if len(telegram.texts) != 0 {
+		t.Fatalf("telegram texts: got %v want none", telegram.texts)
 	}
 }
 

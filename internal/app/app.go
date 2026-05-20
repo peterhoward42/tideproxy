@@ -2,7 +2,6 @@ package app
 
 import (
 	"errors"
-	"log"
 	"net/http"
 	"time"
 )
@@ -77,10 +76,6 @@ func NewApplication(deps Dependencies) *Application {
 
 // ServeHTTP routes incoming requests to the appropriate handler method.
 func (a *Application) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if err := a.deps.Telegram.Send(r.Context(), "tideproxy request received"); err != nil {
-		log.Printf("telegram: %v", err)
-	}
-
 	if r.Method == http.MethodGet && r.URL.Path == "/v1/tides" {
 		a.handleTides(w, r)
 		return

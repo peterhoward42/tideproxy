@@ -1,15 +1,19 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
 	"time"
 )
+
+const telegramCreditsExhaustedAlert = "tideproxy: WorldTides monthly API credits exhausted"
 
 var (
 	errQueryLatMissing = errors.New("missing required query parameter lat")
@@ -67,13 +71,13 @@ func (a *Application) handleTides(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		writeWorldTidesUpstreamFailure(w, body)
+		a.writeWorldTidesUpstreamFailure(r.Context(), w, body)
 		return
 	}
 
 	inResp, err := ParseIncomingResponse(body)
 	if err != nil {
-		writeWorldTidesUpstreamFailure(w, body)
+		a.writeWorldTidesUpstreamFailure(r.Context(), w, body)
 		return
 	}
 
@@ -114,11 +118,16 @@ type apiErrorResponse struct {
 	} `json:"error"`
 }
 
-func writeWorldTidesUpstreamFailure(w http.ResponseWriter, body []byte) {
+func (a *Application) writeWorldTidesUpstreamFailure(ctx context.Context, w http.ResponseWriter, body []byte) {
 	upstreamErr, err := ParseWorldTidesUpstreamError(body)
 	if err != nil {
 		writeAPIError(w, http.StatusBadGateway, "UPSTREAM_ERROR", "Failed to retrieve tidal data")
 		return
+	}
+	if upstreamErr.CreditsExhausted() {
+		if err := a.deps.Telegram.Send(ctx, telegramCreditsExhaustedAlert); err != nil {
+			log.Printf("telegram: %v", err)
+		}
 	}
 	status, code, message := ProxyErrorForWorldTidesUpstream(upstreamErr)
 	writeAPIError(w, status, code, message)
