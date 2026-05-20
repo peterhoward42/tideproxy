@@ -2,25 +2,44 @@
 
 A small HTTP proxy in front of the [WorldTides](https://www.worldtides.info/) API. It exposes a single read-only endpoint that returns high and low tide extremes for a location over a fixed UTC window, with chart datum, no caching, and upstream attribution preserved.
 
-The authoritative human-readable product and API description lives in [`docs/specs/overview.md`](docs/specs/overview.md). A machine-readable OpenAPI 3 description of the same HTTP surface (including CORS preflight and error codes implemented in code) is in [`openapi.yaml`](openapi.yaml) at the repository root. This README summarizes intent and points to how you work on the code locally.
+The authoritative human-readable product and API description lives in [`docs/specs/overview.md`](docs/specs/overview.md). A machine-readable OpenAPI 3 description of the same HTTP surface (including CORS preflight and error codes implemented in code) is in [`openapi.yaml`](openapi.yaml) at the repository root.
 
 ## What it does
 
 - **Endpoint:** `GET /v1/tides` with required query parameters `lat` and `lon` (valid ranges per the spec).
 - **Semantics:** Extremes only, datum fixed to Chart Datum (`CD`), times in UTC. The response window runs from 00:00 UTC on the previous calendar day through 00:00 UTC three days after today (exclusive). Invalid input yields `400` with a structured error; upstream failures yield `502`; some server-side failures yield `500` (see [`openapi.yaml`](openapi.yaml)).
-- **Deployment shape:** Intended as a Google Cloud Function (2nd gen) using the Go [Functions Framework](https://github.com/GoogleCloudPlatform/functions-framework-go) with source-based deployment. The API key for WorldTides is supplied via the `WORLDTIDES_API_KEY` environment variable at runtime (see the spec for the full contract).
+- **Deployment shape:** Google Cloud Function (2nd gen) via the Go [Functions Framework](https://github.com/GoogleCloudPlatform/functions-framework-go). Runtime secrets are environment variables (see [Development](#development)).
 
 ## Repository layout
 
-- **`entry.go`** — Importable package `tideproxy` with the Cloud Functions HTTP entry point ([`TidesProxy`](entry.go)) that gcloud `--entry-point` must name.
-- **`cmd/tideproxy/main.go`** — Local binary: registers the same handler with the Functions Framework and listens on `PORT` or `8080`.
-- **`internal/app/`** — Request validation, upstream call, response mapping, CORS wrapper, and tests.
-- **`docs/specs/overview.md`** — Full API specification (JSON shapes, error codes, implementation notes).
-- **`openapi.yaml`** — OpenAPI 3 schema for `GET`/`OPTIONS` on `/v1/tides` and JSON bodies.
-- **`docs/prompts/`** — Incremental prompts used to drive implementation; much of this codebase was built by working through those steps with Cursor agent skills applied for Go style, testing, and related conventions.
+- **`entry.go`** — Cloud Functions HTTP entry point ([`TidesProxy`](entry.go)); gcloud `--entry-point` must match.
+- **`cmd/tideproxy/main.go`** — Local server: same handler, listens on `PORT` or `8080`.
+- **`internal/app/`** — Request validation, upstream call, response mapping, CORS, tests.
+- **`docs/specs/overview.md`** — Full API specification.
+- **`openapi.yaml`** — OpenAPI 3 schema for `GET`/`OPTIONS` on `/v1/tides`.
 
 ## Development
 
-Common workflows (tests, local run, deploy, example `curl`, and a one-shot “start server and hit it” helper) are defined as **`make` targets** in the [`Makefile`](Makefile). Read that file for exact commands, variables (`GCP_REGION`, `CF_NAME`, etc.), and prerequisites such as `WORLDTIDES_API_KEY` for targets that need it.
+Workflows are **`make` targets** in the [`Makefile`](Makefile) (`gotest`, `runlocalproxysvr`, `deploy`, example `curl`s). Override deploy defaults there (`GCP_REGION`, `CF_NAME`, etc.).
 
-The default goal in the `Makefile` is `gotest`; other targets cover local server, deploy, and example requests—see the file for names and usage.
+### Secrets and local run
+
+Copy [`.env.example`](.env.example) to `.env` at the repo root (`.env` is gitignored), fill in values, then export them — **`make` does not load `.env` itself**:
+
+```bash
+set -a && source .env && set +a
+```
+
+**Terminal 1** — start the local server (requires the three variables above):
+
+```bash
+make runlocalproxysvr
+```
+
+**Terminal 2** — example request against `http://127.0.0.1:8080`:
+
+```bash
+make examplerequestcommandlocal
+```
+
+The same variables must be exported for `make deploy` (passed through to the function as Cloud env vars).
