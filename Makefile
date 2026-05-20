@@ -34,10 +34,14 @@ gcpsetup:
 
 runlocalproxysvr:
 	@test -n "$$WORLDTIDES_API_KEY" || { echo >&2 "WORLDTIDES_API_KEY must be set"; exit 1; }
+	@test -n "$$TELEGRAM_BOT_TOKEN" || { echo >&2 "TELEGRAM_BOT_TOKEN must be set"; exit 1; }
+	@test -n "$$TELEGRAM_CHAT_ID" || { echo >&2 "TELEGRAM_CHAT_ID must be set"; exit 1; }
 	go run ./cmd/tideproxy
 
 deploy:
 	@test -n "$$WORLDTIDES_API_KEY" || { echo >&2 "WORLDTIDES_API_KEY must be set (used for --set-env-vars)"; exit 1; }
+	@test -n "$$TELEGRAM_BOT_TOKEN" || { echo >&2 "TELEGRAM_BOT_TOKEN must be set (used for --set-env-vars)"; exit 1; }
+	@test -n "$$TELEGRAM_CHAT_ID" || { echo >&2 "TELEGRAM_CHAT_ID must be set (used for --set-env-vars)"; exit 1; }
 	gcloud functions deploy $(CF_NAME) \
 		--gen2 \
 		--runtime=go124 \
@@ -46,7 +50,7 @@ deploy:
 		--entry-point=$(CF_ENTRY_POINT) \
 		--trigger-http \
 		--allow-unauthenticated \
-		--set-env-vars=WORLDTIDES_API_KEY=$$WORLDTIDES_API_KEY
+		--set-env-vars=WORLDTIDES_API_KEY=$$WORLDTIDES_API_KEY,TELEGRAM_BOT_TOKEN=$$TELEGRAM_BOT_TOKEN,TELEGRAM_CHAT_ID=$$TELEGRAM_CHAT_ID
 
 # Requires a local server (e.g. make runlocalproxysvr in another terminal).
 examplerequestcommandlocal:

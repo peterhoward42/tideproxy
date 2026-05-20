@@ -18,11 +18,24 @@ import (
 
 func mustNewDeps(t *testing.T, httpClient app.HTTPDoer, worldTidesAPIKey string, clock app.TimeSource) app.Dependencies {
 	t.Helper()
-	deps, err := app.NewDependencies(httpClient, worldTidesAPIKey, clock)
+	deps, err := app.NewDependencies(httpClient, worldTidesAPIKey, clock, noopTelegramNotifier{})
 	if err != nil {
 		t.Fatalf("NewDependencies: %v", err)
 	}
 	return deps
+}
+
+type noopTelegramNotifier struct{}
+
+func (noopTelegramNotifier) Send(context.Context, string) error { return nil }
+
+type recordingTelegramNotifier struct {
+	texts []string
+}
+
+func (r *recordingTelegramNotifier) Send(_ context.Context, text string) error {
+	r.texts = append(r.texts, text)
+	return nil
 }
 
 type fakeHTTPDoer struct {
@@ -395,7 +408,7 @@ func TestApplication_handleTides_upstreamDoError(t *testing.T) {
 func TestNewDependencies_emptyWorldTidesAPIKey(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2021, 5, 5, 0, 0, 0, 0, time.UTC)
-	_, err := app.NewDependencies(http.DefaultClient, "", fixedClock{t: at})
+	_, err := app.NewDependencies(http.DefaultClient, "", fixedClock{t: at}, noopTelegramNotifier{})
 	if !errors.Is(err, app.ErrEmptyWorldTidesAPIKey) {
 		t.Fatalf("NewDependencies: got %v want %v", err, app.ErrEmptyWorldTidesAPIKey)
 	}
@@ -404,7 +417,7 @@ func TestNewDependencies_emptyWorldTidesAPIKey(t *testing.T) {
 func TestNewDependencies_nilHTTPClient(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2021, 5, 5, 0, 0, 0, 0, time.UTC)
-	_, err := app.NewDependencies(nil, "configured", fixedClock{t: at})
+	_, err := app.NewDependencies(nil, "configured", fixedClock{t: at}, noopTelegramNotifier{})
 	if !errors.Is(err, app.ErrNilHTTPClient) {
 		t.Fatalf("NewDependencies: got %v want %v", err, app.ErrNilHTTPClient)
 	}
@@ -412,9 +425,48 @@ func TestNewDependencies_nilHTTPClient(t *testing.T) {
 
 func TestNewDependencies_nilClock(t *testing.T) {
 	t.Parallel()
-	_, err := app.NewDependencies(http.DefaultClient, "k", nil)
+	_, err := app.NewDependencies(http.DefaultClient, "k", nil, noopTelegramNotifier{})
 	if !errors.Is(err, app.ErrNilClock) {
 		t.Fatalf("NewDependencies: got %v want %v", err, app.ErrNilClock)
+	}
+}
+
+func TestNewDependencies_nilTelegramNotifier(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2021, 5, 5, 0, 0, 0, 0, time.UTC)
+	_, err := app.NewDependencies(http.DefaultClient, "k", fixedClock{t: at}, nil)
+	if !errors.Is(err, app.ErrNilTelegramNotifier) {
+		t.Fatalf("NewDependencies: got %v want %v", err, app.ErrNilTelegramNotifier)
+	}
+}
+
+func TestApplication_ServeHTTP_notifiesTelegramOnEveryRequest(t *testing.T) {
+	t.Parallel()
+
+	telegram := &recordingTelegramNotifier{}
+	deps, err := app.NewDependencies(
+		&fakeHTTPDoer{doFn: func(*http.Request) (*http.Response, error) {
+			t.Fatal("upstream should not be called for 404")
+			return nil, nil
+		}},
+		"key",
+		fixedClock{t: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)},
+		telegram,
+	)
+	if err != nil {
+		t.Fatalf("NewDependencies: %v", err)
+	}
+	application := app.NewApplication(deps)
+
+	req := httptest.NewRequest(http.MethodGet, "/nope", http.NoBody)
+	rec := httptest.NewRecorder()
+	application.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status: got %d want %d", rec.Code, http.StatusNotFound)
+	}
+	if len(telegram.texts) != 1 || telegram.texts[0] != "tideproxy request received" {
+		t.Fatalf("telegram texts: got %v want [tideproxy request received]", telegram.texts)
 	}
 }
 

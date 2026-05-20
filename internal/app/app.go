@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"log"
 	"net/http"
 	"time"
 )
@@ -38,11 +39,12 @@ type Dependencies struct {
 	HTTPClient       HTTPDoer
 	WorldTidesAPIKey string
 	Clock            TimeSource
+	Telegram         TelegramNotifier
 }
 
-// NewDependencies returns [Dependencies] with all fields set, or an error if httpClient or
-// clock is nil or worldTidesAPIKey is empty.
-func NewDependencies(httpClient HTTPDoer, worldTidesAPIKey string, clock TimeSource) (Dependencies, error) {
+// NewDependencies returns [Dependencies] with all fields set, or an error if httpClient,
+// clock, or telegram is nil or worldTidesAPIKey is empty.
+func NewDependencies(httpClient HTTPDoer, worldTidesAPIKey string, clock TimeSource, telegram TelegramNotifier) (Dependencies, error) {
 	if httpClient == nil {
 		return Dependencies{}, ErrNilHTTPClient
 	}
@@ -52,10 +54,14 @@ func NewDependencies(httpClient HTTPDoer, worldTidesAPIKey string, clock TimeSou
 	if clock == nil {
 		return Dependencies{}, ErrNilClock
 	}
+	if telegram == nil {
+		return Dependencies{}, ErrNilTelegramNotifier
+	}
 	return Dependencies{
 		HTTPClient:       httpClient,
 		WorldTidesAPIKey: worldTidesAPIKey,
 		Clock:            clock,
+		Telegram:         telegram,
 	}, nil
 }
 
@@ -71,6 +77,10 @@ func NewApplication(deps Dependencies) *Application {
 
 // ServeHTTP routes incoming requests to the appropriate handler method.
 func (a *Application) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if err := a.deps.Telegram.Send(r.Context(), "tideproxy request received"); err != nil {
+		log.Printf("telegram: %v", err)
+	}
+
 	if r.Method == http.MethodGet && r.URL.Path == "/v1/tides" {
 		a.handleTides(w, r)
 		return

@@ -15,7 +15,13 @@ var (
 )
 
 func prepareHandler() {
-	deps, err := app.NewDependencies(http.DefaultClient, os.Getenv("WORLDTIDES_API_KEY"), app.WallClock{})
+	httpClient := http.DefaultClient
+	telegram, err := app.NewTelegramBotNotifier(httpClient, os.Getenv("TELEGRAM_BOT_TOKEN"), os.Getenv("TELEGRAM_CHAT_ID"))
+	if err != nil {
+		handlerErr = err
+		return
+	}
+	deps, err := app.NewDependencies(httpClient, os.Getenv("WORLDTIDES_API_KEY"), app.WallClock{}, telegram)
 	if err != nil {
 		handlerErr = err
 		return
