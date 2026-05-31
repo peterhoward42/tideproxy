@@ -63,3 +63,20 @@ Same handler as production, via `cmd/tideproxy` and the Functions Framework. Dif
 Still required locally: `WORLDTIDES_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (see `.env.example`). `make runlocalproxysvr` does not require the GCS variables.
 
 **Tests (no deploy, no `.env`):** `make gotest`
+
+## Telegram notifications
+
+The proxy sends optional Telegram messages on the same bot/chat as quota alerts (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`).
+
+| Event | When | Message |
+|-------|------|---------|
+| Default app load | Successful `GET /v1/tides` whose validated `lat`/`lon` fall within the Looe bounding box (East Looe, West Looe, and Looe town) | `tideproxy:load:default` |
+| Custom location load | Any other successful tide request | `tideproxy:load:custom` |
+| Credits exhausted | WorldTides upstream error indicates quota exhaustion (deduped to once per UTC hour in production via GCS) | `tideproxy: WorldTides monthly API credits exhausted` |
+
+Load notifications fire **once per successful response**, with no dedupe. Failed upstream calls are silent for load alerts.
+
+**Configuration** (in [`internal/app/telegram_load_notify.go`](internal/app/telegram_load_notify.go)):
+
+- `looeDefaultLoadLatMin` / `LatMax` / `LonMin` / `LonMax` — bounding box on validated coordinates for the client’s default Looe location fetch.
+- `telegramLoadNotificationsEnabled` — compile-time kill switch for load notifications only. Set to `false` and redeploy to silence load pings during a traffic spike; credit-exhaustion alerts are unaffected.

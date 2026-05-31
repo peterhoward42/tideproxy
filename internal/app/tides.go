@@ -89,6 +89,8 @@ func (a *Application) handleTides(w http.ResponseWriter, r *http.Request) {
 	if err := WriteTidesAPIResponse(w, apiResp); err != nil {
 		return
 	}
+
+	a.notifyTelegramLoadSuccess(r.Context(), in.Lat, in.Lon)
 }
 
 func latLonQueryJSON(q url.Values) ([]byte, error) {
